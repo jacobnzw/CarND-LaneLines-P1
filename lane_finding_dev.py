@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
+import matplotlib.cm as cm
 import numpy as np
 import cv2
 import os
@@ -101,15 +102,17 @@ def weighted_img(img, initial_img, alpha=0.8, beta=1., gamma=0.):
     return cv2.addWeighted(initial_img, alpha, img, beta, gamma)
 
 
-def lane_finding(image, low_threshold=50, high_threshold=150,
-                 rho=1, theta=np.pi / 180, threshold=10, min_line_len=10, max_line_gap=25):
+def lane_finding(image,
+                 low_threshold=100, high_threshold=240,
+                 rho=1, theta=1*np.pi/180, threshold=15, min_line_len=50, max_line_gap=60):
     height, width, c = image.shape
 
     # TO GRAYSCALE
     work = grayscale(image)
+    gray = work.copy()
 
     # GAUSSIAN BLUR
-    kernel_size = 5
+    kernel_size = 3
     work = gaussian_blur(work, kernel_size)
 
     # EDGE DETECTION
@@ -136,7 +139,7 @@ def lane_finding(image, low_threshold=50, high_threshold=150,
 
     # filter out lines with infinite or extreme derivatives
     der = (lines[:, :, 2] - lines[:, :, 0]) / (lines[:, :, 3] - lines[:, :, 1])
-    der_idx = np.logical_and(np.logical_not(np.isinf(der)), np.logical_and(np.abs(der) > 1, np.abs(der) < 3))
+    der_idx = np.logical_and(np.logical_not(np.isinf(der)), np.logical_and(np.abs(der) > 1, np.abs(der) < 2))
     lines = lines[der_idx, ...]
     der = der[der_idx, ...]
     # plt.hist(der, 50)
@@ -166,9 +169,9 @@ def lane_finding(image, low_threshold=50, high_threshold=150,
 
     # DRAW LINES
     line_img = np.zeros((work.shape[0], work.shape[1], 3), dtype=np.uint8)
-    draw_lines(line_img, lines, thickness=10)
+    draw_lines(line_img, lines, thickness=12)
 
-    return weighted_img(line_img, image, 1.), (edges, im_lines)
+    return weighted_img(line_img, image, 1.), (gray, edges, masked, im_lines)
 
 
 def process_test_images():
@@ -196,7 +199,7 @@ def process_test_images():
 
 def process_image(image):
     result, rest = lane_finding(image,
-                                low_threshold=120, high_threshold=240,
+                                low_threshold=100, high_threshold=240,
                                 rho=1, theta=1*np.pi/180, threshold=15, min_line_len=50, max_line_gap=60)
     return result
 
@@ -215,8 +218,8 @@ def process_test_video(filename):
 def analyze_image(filename):
     im = mpimg.imread('test_images/' + filename)
     im_lanes, rest = lane_finding(im,
-                                  low_threshold=120, high_threshold=240,
-                                  rho=2, threshold=40, min_line_len=150, max_line_gap=60)
+                                  low_threshold=100, high_threshold=240,
+                                  rho=2, threshold=10, min_line_len=50, max_line_gap=20)
 
     plt.figure()
     plt.imshow(im_lanes)
@@ -229,11 +232,25 @@ def analyze_image(filename):
     plt.show()
 
 
+def intermediate_steps(in_file_path, out_dirname):
+    im, rest = lane_finding(mpimg.imread(in_file_path))
+
+    if not os.path.isdir(out_dirname):
+        # create output directory if it doesn't exist
+        os.makedirs(out_dirname)
+
+    for i, image in enumerate(rest):
+        out_path = out_dirname + 'result_step_{}'.format(i) + '.' + 'jpg'
+        if i < 3:
+            mpimg.imsave(out_path, image, format='jpg', cmap=cm.get_cmap('gray'))
+        else:
+            mpimg.imsave(out_path, image, format='jpg')
+
+
 if __name__ == '__main__':
     # process_test_images()
 
     # analyze_image('problematic4.jpg')
-    process_test_video('solidYellowLeft.mp4')
-    process_test_video('solidWhiteRight.mp4')
-
-
+    # process_test_video('solidYellowLeft.mp4')
+    # process_test_video('solidWhiteRight.mp4')
+    intermediate_steps('test_images/problematic4.jpg', './examples/')
